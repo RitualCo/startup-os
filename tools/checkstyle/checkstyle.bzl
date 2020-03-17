@@ -10,16 +10,19 @@ JavaSourceFiles = provider(
 # target info
 def collect_sources_impl(target, ctx):
     files = []
-    if hasattr(ctx.rule.attr, 'srcs'):
+    if hasattr(ctx.rule.attr, 'srcs') and ctx.rule.kind in ['java_library', 'java_binary', 'java_test'] \
+        and not target.label.workspace_root.startswith('external/'):
         for src in ctx.rule.attr.srcs:
             for file in src.files.to_list():
                 if file.extension == 'java':
                     files.append(file)
-    return [JavaSourceFiles(files = files)]
+    srcs = depset(files, transitive = [dep[JavaSourceFiles].files for dep in ctx.rule.attr.deps])
+    return [JavaSourceFiles(files = srcs)]
 
 
 collect_sources = aspect(
     implementation = collect_sources_impl,
+    attr_aspects = ["deps"],
 )
 
 
@@ -43,9 +46,7 @@ def _checkstyle_test_impl(ctx):
       inputs.append(suppressions)
 
     # All the java files should be added to depset for executing the checkstyle script
-    sourcefiles = []
-    for target in ctx.attr.targets:
-        sourcefiles += target[JavaSourceFiles].files
+    sourcefiles = depset(transitive = [target[JavaSourceFiles].files for target in ctx.attr.targets]).to_list()
 
     # Create a file with all sourcefile paths to be passed to the command
     filename = "targets.txt"
